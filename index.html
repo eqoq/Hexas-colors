@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hexas-colors</title>
+<style>
+  :root{
+    --bg:#26302b; --panel:#2f3b34; --board:#1c2521; --line:#4a5a51;
+    --ink:#f1ede4; --sub:#a9b6ad;
+    --R:#d94f4f; --O:#e08a3c; --Y:#e6c94c; --G:#4fae6d; --B:#4a7fc9; --P:#9463c9;
+  }
+  html,body{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,'Iowan Old Style',serif;min-height:100%;}
+  h1{font-weight:400;letter-spacing:.02em;margin:.4em 0 .1em;font-size:1.5rem}
+  #wrap{max-width:1000px;margin:0 auto;padding:16px}
+  #setup{text-align:center;padding:60px 16px}
+  #setup p{color:var(--sub);max-width:440px;margin:8px auto 28px}
+  .pbtn{display:inline-block;margin:6px;padding:14px 26px;background:var(--panel);border:1px solid var(--line);
+        color:var(--ink);border-radius:8px;font-size:1.1rem;cursor:pointer;font-family:inherit}
+  .pbtn:hover{border-color:var(--Y)}
+  #game{display:none}
+  #topbar{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+  #message{color:var(--Y);min-height:1.4em;font-style:italic}
+  #boardWrap{background:var(--board);border-radius:12px;padding:8px;overflow:auto;border:1px solid var(--line)}
+  svg#board{display:block;margin:0 auto;touch-action:manipulation}
+  .cell{fill:#26332c;stroke:var(--line);stroke-width:1.5}
+  .cell.empty:hover{fill:#33443a}
+  .cell.printed{stroke:var(--Y);stroke-width:2}
+  .cell.anchor{stroke:#fff;stroke-width:3}
+  .cell.previewTarget{fill:#3a4c40}
+  .previewSym{opacity:.6;stroke:#fff;stroke-width:1.5;stroke-dasharray:3 2}
+  .sym{pointer-events:none}
+  #scores{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+  .sboard{background:var(--panel);border-radius:10px;padding:8px 10px;flex:1;min-width:210px;border:1px solid var(--line)}
+  .sboard.active{border-color:var(--Y)}
+  .sboard h3{margin:0 0 6px;font-size:.95rem;font-weight:600}
+  .pegrow{display:flex;align-items:center;gap:6px;margin:3px 0}
+  .swatch{width:14px;height:14px;border-radius:50%;flex:none}
+  .track{flex:1;height:8px;background:#1c2521;border-radius:4px;position:relative}
+  .fill{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+  .val{width:22px;text-align:right;font-size:.8rem;color:var(--sub)}
+  #rackWrap{margin-top:12px}
+  #rack{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;padding:12px;background:var(--panel);border-radius:10px;border:1px solid var(--line)}
+  .tile{display:flex;touch-action:none;-webkit-touch-callout:none;user-select:none;cursor:grab;border-radius:8px;padding:2px}
+  .tile:hover{background:#ffffff0d}
+  .tile.pendingTile{opacity:.3;cursor:default}
+  .tileHex{fill:#26332c;stroke:var(--line);stroke-width:1.5}
+  .tileSvg{display:block}
+  #dragGhost{position:fixed;left:0;top:0;pointer-events:none;z-index:999;filter:drop-shadow(0 6px 10px rgba(0,0,0,.55))}
+  #dragGhost .tileHex{stroke:#fff;stroke-width:2}
+  #controls{display:flex;justify-content:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+  #placeToolbar{display:none;justify-content:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+  button.act{padding:10px 18px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-family:inherit;cursor:pointer;font-size:.95rem}
+  button.act:disabled{opacity:.4;cursor:default}
+  button.confirm{border-color:var(--G)}
+  #legend{margin-top:10px;font-size:.8rem;color:var(--sub);text-align:center}
+  @media (max-width:600px){ .sboard{min-width:150px} }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="setup">
+    <h1>Hexas-colors</h1>
+    <p>Place tiles to extend lines of matching symbols. Try to raise every color — your <em>lowest</em> score is what counts. Local hotseat play, pass the device each turn.</p>
+    <div>
+      <button class="pbtn" onclick="startGame(2,true)">You vs Bot</button>
+      <button class="pbtn" onclick="startGame(2)">2 Players (hotseat)</button>
+      <button class="pbtn" onclick="startGame(3)">3 Players (hotseat)</button>
+      <button class="pbtn" onclick="startGame(4)">4 Players (hotseat)</button>
+    </div>
+  </div>
+
+  <div id="game">
+    <div id="topbar">
+      <h1 id="turnLabel"></h1>
+      <button class="act" onclick="quitToMenu()">Quit to menu</button>
+    </div>
+    <div id="message">&nbsp;</div>
+    <div id="gameOver" style="display:none">
+      <h2 id="winnerLine" style="margin:0 0 10px"></h2>
+      <div id="gameOverControls" style="margin-bottom:14px">
+        <button class="act" onclick="playAgain()">Play again</button>
+        <button class="act" onclick="quitToMenu()">Main menu</button>
+      </div>
+    </div>
+    <div id="scores"></div>
+    <div id="boardWrap"><svg id="board"></svg></div>
+    <div id="rackWrap">
+      <div id="rack"></div>
+      <div id="controls">
+        <button class="act" id="swapBtn" onclick="doSwap()">Swap rack (once/turn)</button>
+      </div>
+      <div id="placeToolbar">
+        <button class="act" onclick="rotatePending()">⟳ Rotate</button>
+        <button class="act confirm" onclick="confirmPending()">Confirm placement</button>
+        <button class="act" onclick="cancelPending()">Cancel</button>
+      </div>
+      <div id="legend">Drag a tile onto the board. Rotate if needed, then confirm the placement.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const COLORS = ['R','O','Y','G','B','P'];
+const CNAME = {R:'Red',O:'Orange',Y:'Yellow',G:'Green',B:'Blue',P:'Purple'};
+const CSS = {R:'var(--R)',O:'var(--O)',Y:'var(--Y)',G:'var(--G)',B:'var(--B)',P:'var(--P)'};
+const DIRS = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+const N = 5;          // board radius in cells
+const SIZE = 24;       // hex circumradius in px
+
+let board = {};        // key "q,r" -> {q,r,sym:null,printed:false}
+let bag = [];
+let players = [];
+let current = 0;
+let firstMovesLeft = 0;
+let usedPrinted = new Set();
+let pending = null;    // {ti, anchor, validDirs:[dirIndex...], dirIdx} while a drag is awaiting confirmation
+let swappedThisTurn = false;
+
+function key(q,r){ return q+','+r; }
+
+function buildBoard(){
+  board = {};
+  for(let q=-N;q<=N;q++){
+    let rmin = Math.max(-N,-q-N), rmax = Math.min(N,-q+N);
+    for(let r=rmin;r<=rmax;r++){
+      board[key(q,r)] = {q,r,sym:null,printed:false};
+    }
+  }
+  for(let i=0;i<6;i++){
+    const q = DIRS[i][0]*3, r = DIRS[i][1]*3;
+    const c = board[key(q,r)];
+    c.sym = COLORS[i]; c.printed = true;
+  }
+}
+
+function genBag(){
+  const t = [];
+  for(let i=0;i<6;i++) for(let j=i;j<6;j++){
+    const n = i===j ? 10 : 4;
+    for(let k=0;k<n;k++) t.push([COLORS[i],COLORS[j]]);
+  }
+  for(let i=t.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [t[i],t[j]]=[t[j],t[i]]; }
+  return t;
+}
+
+let lastMode = {n:2, vsBot:true};
+
+function startGame(n, vsBot){
+  lastMode = {n, vsBot: !!vsBot};
+  document.getElementById('setup').style.display='none';
+  document.getElementById('game').style.display='block';
+  document.getElementById('gameOver').style.display='none';
+  document.getElementById('rackWrap').style.display='block';
+  buildBoard();
+  bag = genBag();
+  players = [];
+  for(let i=0;i<n;i++){
+    const scores={}, bonusGiven={};
+    COLORS.forEach(c=>{scores[c]=0;bonusGiven[c]=false;});
+    players.push({rack:draw(6), scores, bonusGiven, pendingBonus:0, hasMovedFirst:false, isBot: !!(vsBot && i===1)});
+  }
+  current = 0; firstMovesLeft = n; usedPrinted = new Set();
+  pending=null; swappedThisTurn=false;
+  renderAll();
+  setMsg('Player 1: place your opening tile touching a printed symbol.');
+}
+
+function playAgain(){ startGame(lastMode.n, lastMode.vsBot); }
+
+function quitToMenu(){
+  const bar = document.getElementById('message');
+  bar.innerHTML = '';
+  const span = document.createElement('span');
+  span.textContent = 'Quit this game? ';
+  const yes = document.createElement('button');
+  yes.className='act'; yes.textContent='Yes, quit';
+  yes.onclick = ()=>{
+    document.getElementById('game').style.display='none';
+    document.getElementById('setup').style.display='block';
+  };
+  const no = document.createElement('button');
+  no.className='act'; no.textContent='Cancel';
+  no.onclick = ()=>{ renderAll(); };
+  bar.appendChild(span); bar.appendChild(yes); bar.appendChild(no);
+}
+
+function draw(n){
+  const out=[];
+  for(let i=0;i<n && bag.length;i++) out.push(bag.pop());
+  return out;
+}
+
+// ---------- geometry ----------
+function pixel(q,r){
+  const x = SIZE*Math.sqrt(3)*(q+r/2);
+  const y = SIZE*1.5*r;
+  return [x,y];
+}
+function hexPoints(cx,cy,size){
+  size = size===undefined ? SIZE : size;
+  const pts=[];
+  for(let i=0;i<6;i++){
+    const ang = Math.PI/180*(60*i-30);
+    pts.push((cx+size*Math.cos(ang)).toFixed(1)+','+(cy+size*Math.sin(ang)).toFixed(1));
+  }
+  return pts.join(' ');
+}
+function tileMarkup(colors, s){
+  const sq3 = Math.sqrt(3), half = s*sq3/2;
+  const cx1 = half+2, cy1 = s+2, cx2 = cx1+s*sq3, cy2 = cy1;
+  const w = cx2+half+2, h = s*2+4;
+  const svg = `<svg class="tileSvg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" xmlns="http://www.w3.org/2000/svg">
+    <polygon class="tileHex" points="${hexPoints(cx1,cy1,s)}"/>
+    <polygon class="tileHex" points="${hexPoints(cx2,cy2,s)}"/>
+    <circle cx="${cx1}" cy="${cy1}" r="${s*0.5}" fill="${CSS[colors[0]]}"/>
+    <circle cx="${cx2}" cy="${cy2}" r="${s*0.5}" fill="${CSS[colors[1]]}"/>
+  </svg>`;
+  return {svg, w, h};
+}
+function neighbors(q,r){
+  return DIRS.map(d=>key(q+d[0],r+d[1]));
+}
+function dirIndexBetween(q1,r1,q2,r2){
+  const dq=q2-q1, dr=r2-r1;
+  for(let i=0;i<6;i++) if(DIRS[i][0]===dq && DIRS[i][1]===dr) return i;
+  return -1;
+}
+
+// ---------- rendering ----------
+function renderAll(){
+  renderBoard();
+  renderScores();
+  renderRack();
+  document.getElementById('turnLabel').textContent = pname(current)+"'s turn";
+  document.getElementById('swapBtn').disabled = swappedThisTurn || !swapAllowed() || players[current].isBot || !!pending;
+  document.getElementById('placeToolbar').style.display = pending ? 'flex' : 'none';
+  document.getElementById('controls').style.display = pending ? 'none' : 'flex';
+}
+function pname(i){ return players[i].isBot ? 'Bot' : 'Player '+(i+1);
+}
+function setMsg(m){ document.getElementById('message').textContent = m; }
+
+function renderBoard(){
+  const svg = document.getElementById('board');
+  svg.innerHTML='';
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  const cells = Object.values(board);
+  cells.forEach(c=>{ const [x,y]=pixel(c.q,c.r); minX=Math.min(minX,x-SIZE); maxX=Math.max(maxX,x+SIZE);
+    minY=Math.min(minY,y-SIZE); maxY=Math.max(maxY,y+SIZE); });
+  const w = maxX-minX+8, h = maxY-minY+8;
+  svg.setAttribute('viewBox', `${minX-4} ${minY-4} ${w} ${h}`);
+  svg.setAttribute('width', Math.min(w, 760));
+  svg.setAttribute('height', h*(Math.min(w,760)/w));
+
+  let previewA=null, previewB=null, colorA=null, colorB=null;
+  if(pending){
+    const [aq,ar]=pending.anchor.split(',').map(Number);
+    const d = DIRS[pending.validDirs[pending.dirIdx]];
+    previewA = pending.anchor; previewB = key(aq+d[0], ar+d[1]);
+    const tile = players[current].rack[pending.ti];
+    colorA = tile[0]; colorB = tile[1];
+  }
+
+  cells.forEach(c=>{
+    const [x,y]=pixel(c.q,c.r);
+    const poly = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    poly.setAttribute('points', hexPoints(x,y));
+    const k = key(c.q,c.r);
+    let cls = 'cell '+(c.sym? '' : 'empty')+(c.printed?' printed':'');
+    if(k===previewA || k===previewB) cls+=' anchor previewTarget';
+    poly.setAttribute('class', cls);
+    svg.appendChild(poly);
+    if(c.sym){
+      const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      circ.setAttribute('cx',x); circ.setAttribute('cy',y); circ.setAttribute('r', SIZE*0.5);
+      circ.setAttribute('fill', CSS[c.sym]); circ.setAttribute('class','sym');
+      if(c.printed){ circ.setAttribute('stroke','#fff'); circ.setAttribute('stroke-width','1.5'); }
+      svg.appendChild(circ);
+    }
+  });
+
+  if(previewA){
+    [[previewA,colorA],[previewB,colorB]].forEach(([k,col])=>{
+      const [pq,pr]=k.split(',').map(Number); const [x,y]=pixel(pq,pr);
+      const circ = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      circ.setAttribute('cx',x); circ.setAttribute('cy',y); circ.setAttribute('r', SIZE*0.5);
+      circ.setAttribute('fill', CSS[col]); circ.setAttribute('class','previewSym');
+      svg.appendChild(circ);
+    });
+  }
+}
+
+function renderScores(){
+  const el = document.getElementById('scores'); el.innerHTML='';
+  players.forEach((p,i)=>{
+    const div=document.createElement('div');
+    div.className='sboard'+(i===current?' active':'');
+    let html = '<h3>'+pname(i)+'</h3>';
+    COLORS.forEach(c=>{
+      const v=p.scores[c];
+      html += `<div class="pegrow"><div class="swatch" style="background:${CSS[c]}"></div>
+        <div class="track"><div class="fill" style="width:${(v/18*100)}%;background:${CSS[c]}"></div></div>
+        <div class="val">${v}</div></div>`;
+    });
+    div.innerHTML = html;
+    el.appendChild(div);
+  });
+}
+
+function renderRack(){
+  const el = document.getElementById('rack'); el.innerHTML='';
+  const rack = players[current].rack;
+  const bot = players[current].isBot;
+  rack.forEach((t,i)=>{
+    const d=document.createElement('div');
+    d.className='tile'+(pending && pending.ti===i ? ' pendingTile':'');
+    d.innerHTML = tileMarkup(t,15).svg;
+    if(!bot && !pending) d.addEventListener('pointerdown', (e)=>startDrag(e,i,t));
+    el.appendChild(d);
+  });
+}
+
+// ---------- drag & drop ----------
+let ghostEl=null;
+function createGhost(x,y,tile){
+  removeGhost();
+  ghostEl=document.createElement('div');
+  ghostEl.id='dragGhost';
+  const m = tileMarkup(tile,17);
+  ghostEl.innerHTML = m.svg;
+  ghostEl._w = m.w; ghostEl._h = m.h;
+  document.body.appendChild(ghostEl);
+  moveGhost(x,y);
+}
+function moveGhost(x,y){ if(ghostEl){ const w=ghostEl._w||64,h=ghostEl._h||40; ghostEl.style.transform = `translate(${x-w/2}px, ${y-h/2}px)`; } }
+function removeGhost(){ if(ghostEl){ ghostEl.remove(); ghostEl=null; } }
+
+function startDrag(e,ti,tile){
+  if(pending) return;
+  e.preventDefault();
+  const el=e.currentTarget;
+  try{ el.setPointerCapture(e.pointerId); }catch(err){}
+  createGhost(e.clientX,e.clientY,tile);
+  const onMove=(ev)=>moveGhost(ev.clientX,ev.clientY);
+  const onUp=(ev)=>{
+    el.removeEventListener('pointermove',onMove);
+    el.removeEventListener('pointerup',onUp);
+    el.removeEventListener('pointercancel',onUp);
+    endDrag(ev.clientX,ev.clientY,ti);
+  };
+  el.addEventListener('pointermove',onMove);
+  el.addEventListener('pointerup',onUp);
+  el.addEventListener('pointercancel',onUp);
+}
+
+function endDrag(x,y,ti){
+  removeGhost();
+  const svg = document.getElementById('board');
+  const rect = svg.getBoundingClientRect();
+  if(x<rect.left||x>rect.right||y<rect.top||y>rect.bottom){
+    setMsg('Drop the tile on the board to place it.');
+    return;
+  }
+  const pt = svg.createSVGPoint(); pt.x=x; pt.y=y;
+  const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+  let best=null, bestD=Infinity;
+  Object.values(board).forEach(c=>{
+    if(c.sym) return;
+    const [cx,cy]=pixel(c.q,c.r);
+    const d=(cx-svgP.x)**2+(cy-svgP.y)**2;
+    if(d<bestD){ bestD=d; best=c; }
+  });
+  if(!best || bestD > (SIZE*2.4)**2){ setMsg('Drop it a little closer to an empty hex.'); return; }
+
+  const player = players[current];
+  const validDirs=[];
+  DIRS.forEach((d,idx)=>{
+    const nk=key(best.q+d[0], best.r+d[1]); const n=board[nk];
+    if(n && !n.sym){
+      if(player.hasMovedFirst || touchesFreshPrinted(best.q,best.r,best.q+d[0],best.r+d[1])) validDirs.push(idx);
+    }
+  });
+  if(validDirs.length===0){
+    setMsg(player.hasMovedFirst
+      ? 'No room to place a tile there — try a spot with an empty neighbor.'
+      : 'Your first tile must touch a fresh printed symbol — drop it closer to one.');
+    return;
+  }
+  pending = {ti, anchor:key(best.q,best.r), validDirs, dirIdx:0};
+  renderAll();
+  setMsg('Rotate if needed, then confirm the placement.');
+}
+
+function rotatePending(){
+  if(!pending) return;
+  pending.dirIdx = (pending.dirIdx+1)%pending.validDirs.length;
+  renderBoard();
+}
+
+function cancelPending(){ pending=null; renderAll(); setMsg('Placement cancelled.'); }
+
+function confirmPending(){
+  if(!pending) return;
+  const [aq,ar]=pending.anchor.split(',').map(Number);
+  const d = DIRS[pending.validDirs[pending.dirIdx]];
+  const kB = key(aq+d[0], ar+d[1]);
+  const res = corePlace(current, pending.ti, pending.anchor, kB);
+  pending = null;
+  if(!res.ok){ setMsg(res.msg); renderAll(); return; }
+
+  const player = players[current];
+  let msg = `${pname(current)} scored ${CNAME[res.tile[0]]} +${res.gained}, ${CNAME[res.tile[1]]} +${res.gained2}.`;
+
+  if(player.pendingBonus>0){
+    player.pendingBonus--;
+    msg += ' Hexas-colors! Bonus placement used.';
+    if(player.pendingBonus>0){
+      setMsg(msg+' You have another bonus placement — drag another tile.');
+      renderAll();
+      return;
+    }
+  }
+  refillAndEndTurn(msg);
+}
+
+function touchesFreshPrinted(aq,ar,bq,br){
+  return neighbors(aq,ar).concat(neighbors(bq,br)).some(k=>{
+    const c=board[k]; return c && c.printed && !usedPrinted.has(k);
+  });
+}
+
+// Places rack[tileIdx] on cells kA/kB (tile[0]->kA, tile[1]->kB) for the given player index.
+// Returns {ok, msg, gained, gained2, tile} — mutates board/scores/rack when ok.
+function corePlace(playerIdx, tileIdx, kA, kB){
+  const player = players[playerIdx];
+  const tile = player.rack[tileIdx];
+  const [aq,ar]=kA.split(',').map(Number), [bq,br]=kB.split(',').map(Number);
+
+  if(!player.hasMovedFirst && !touchesFreshPrinted(aq,ar,bq,br)){
+    return {ok:false, msg:'Your first tile must touch one of the six printed symbols (a different one than other players used).'};
+  }
+
+  board[kA].sym = tile[0];
+  board[kB].sym = tile[1];
+
+  const gained = scoreSide(aq,ar,tile[0], bq,br);
+  const gained2 = scoreSide(bq,br,tile[1], aq,ar);
+  applyScore(player, tile[0], gained);
+  applyScore(player, tile[1], gained2);
+
+  if(!player.hasMovedFirst){
+    neighbors(aq,ar).concat(neighbors(bq,br)).forEach(k=>{
+      const c=board[k]; if(c && c.printed && !usedPrinted.has(k)) usedPrinted.add(k);
+    });
+    player.hasMovedFirst = true;
+    firstMovesLeft = Math.max(0, firstMovesLeft-1);
+  }
+
+  player.rack.splice(tileIdx,1);
+  return {ok:true, tile, gained, gained2};
+}
+
+
+// ---------- bot ----------
+function emptyEdges(){
+  const edges=[]; const visited=new Set();
+  Object.values(board).forEach(c=>{
+    if(c.sym) return;
+    DIRS.forEach(d=>{
+      const nk=key(c.q+d[0], c.r+d[1]); const n=board[nk];
+      if(n && !n.sym){
+        const a=key(c.q,c.r);
+        const ek = a<nk? a+'|'+nk : nk+'|'+a;
+        if(!visited.has(ek)){ visited.add(ek); edges.push([a,nk]); }
+      }
+    });
+  });
+  return edges;
+}
+
+function findBestMove(player){
+  let edges = emptyEdges();
+  if(!player.hasMovedFirst){
+    edges = edges.filter(([a,b])=>{
+      const [aq,ar]=a.split(',').map(Number), [bq,br]=b.split(',').map(Number);
+      return touchesFreshPrinted(aq,ar,bq,br);
+    });
+    if(edges.length===0) edges = emptyEdges();
+  }
+  let best=null, bestScore=-1;
+  player.rack.forEach((tile,ti)=>{
+    edges.forEach(([e0,e1])=>{
+      [[e0,e1],[e1,e0]].forEach(([kA,kB])=>{
+        const [aq,ar]=kA.split(',').map(Number), [bq,br]=kB.split(',').map(Number);
+        const s = scoreSide(aq,ar,tile[0],bq,br) + scoreSide(bq,br,tile[1],aq,ar);
+        if(s>bestScore || (s===bestScore && Math.random()<0.15)){ bestScore=s; best={ti,kA,kB}; }
+      });
+    });
+  });
+  return best;
+}
+
+function botTurn(){
+  setMsg('Bot is thinking…');
+  renderAll();
+  setTimeout(()=>botStep(''), 500);
+}
+
+function botStep(msgSoFar){
+  const player = players[current];
+  const move = findBestMove(player);
+  if(!move){ refillAndEndTurn(msgSoFar); return; }
+  const res = corePlace(current, move.ti, move.kA, move.kB);
+  if(!res.ok){ refillAndEndTurn(msgSoFar); return; }
+  let msg = msgSoFar + `${pname(current)} placed ${CNAME[res.tile[0]]}/${CNAME[res.tile[1]]}, scoring +${res.gained}/+${res.gained2}. `;
+  if(player.pendingBonus>0){
+    player.pendingBonus--;
+    msg += 'Hexas-colors! Bot gets a bonus placement. ';
+    setTimeout(()=>botStep(msg), 500);
+    return;
+  }
+  refillAndEndTurn(msg);
+}
+
+function scoreSide(q,r,color, otherQ,otherR){
+  const excludeDir = dirIndexBetween(q,r,otherQ,otherR);
+  let total=0;
+  for(let i=0;i<6;i++){
+    if(i===excludeDir) continue;
+    let cq=q, cr=r, count=0;
+    while(true){
+      cq+=DIRS[i][0]; cr+=DIRS[i][1];
+      const c = board[key(cq,cr)];
+      if(!c || !c.sym || c.sym!==color) break;
+      count++;
+    }
+    total+=count;
+  }
+  return total;
+}
+
+function applyScore(player, color, amount){
+  const before = player.scores[color];
+  let after = before+amount;
+  if(after>=18){ after=18; if(!player.bonusGiven[color]){ player.bonusGiven[color]=true; player.pendingBonus++; } }
+  player.scores[color]=after;
+}
+
+function swapAllowed(){
+  const p = players[current];
+  const lowest = Math.min(...COLORS.map(c=>p.scores[c]));
+  const lowColors = COLORS.filter(c=>p.scores[c]===lowest);
+  const rackColors = new Set(p.rack.flat());
+  return !lowColors.some(c=>rackColors.has(c));
+}
+
+function doSwap(){
+  if(swappedThisTurn || !swapAllowed()) return;
+  const p = players[current];
+  bag.push(...p.rack);
+  for(let i=bag.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [bag[i],bag[j]]=[bag[j],bag[i]]; }
+  p.rack = draw(6);
+  swappedThisTurn = true;
+  pending=null;
+  renderAll();
+  setMsg('Rack swapped.');
+}
+
+function refillAndEndTurn(msg){
+  const p = players[current];
+  while(p.rack.length<6 && bag.length) p.rack.push(bag.pop());
+  swappedThisTurn=false;
+
+  if(!hasAnyMove()){
+    endGame();
+    return;
+  }
+  current = (current+1)%players.length;
+  renderAll();
+  let extra = '';
+  if(!players[current].hasMovedFirst) extra = ' '+pname(current)+': place your opening tile touching a printed symbol.';
+  setMsg(msg+extra);
+  if(players[current].isBot) setTimeout(botTurn, 400);
+}
+
+function hasAnyMove(){
+  return Object.values(board).some(c=>!c.sym && neighbors(c.q,c.r).some(k=>board[k] && !board[k].sym));
+}
+
+function endGame(){
+  const results = players.map((p,i)=>{
+    const sorted = COLORS.map(c=>p.scores[c]).sort((a,b)=>a-b);
+    return {i, sorted};
+  });
+  results.sort((a,b)=>{
+    for(let k=0;k<6;k++){ if(b.sorted[k]!==a.sorted[k]) return b.sorted[k]-a.sorted[k]; }
+    return 0;
+  });
+  const winner = results[0].i;
+  document.getElementById('rackWrap').style.display='none';
+  document.getElementById('winnerLine').textContent = `Game over — ${pname(winner)} wins with a lowest score of ${results[0].sorted[0]}!`;
+  document.getElementById('gameOver').style.display='block';
+  setMsg('');
+  renderScores();
+  renderBoard();
+}
+</script>
+</body>
+</html>
