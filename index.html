@@ -109,6 +109,7 @@
       </div>
       <div id="placeToolbar">
         <button class="act" onclick="rotatePending()">⟳ Rotate</button>
+        <button class="act" onclick="flipPending()">↔ Flip colors</button>
         <button class="act confirm" onclick="confirmPending()">Confirm placement</button>
         <button class="act" onclick="cancelPending()">Cancel</button>
       </div>
@@ -281,7 +282,8 @@ function renderBoard(){
     const d = DIRS[pending.validDirs[pending.dirIdx]];
     previewA = pending.anchor; previewB = key(aq+d[0], ar+d[1]);
     const tile = players[current].rack[pending.ti];
-    colorA = tile[0]; colorB = tile[1];
+    colorA = pending.flipped ? tile[1] : tile[0];
+    colorB = pending.flipped ? tile[0] : tile[1];
   }
 
   cells.forEach(c=>{
@@ -410,7 +412,7 @@ function endDrag(x,y,ti){
       : 'Your first tile must touch a fresh printed symbol — drop it closer to one.');
     return;
   }
-  pending = {ti, anchor:key(best.q,best.r), validDirs, dirIdx:0};
+  pending = {ti, anchor:key(best.q,best.r), validDirs, dirIdx:0, flipped:false};
   renderAll();
   setMsg('Rotate if needed, then confirm the placement.');
 }
@@ -421,6 +423,12 @@ function rotatePending(){
   renderBoard();
 }
 
+function flipPending(){
+  if(!pending) return;
+  pending.flipped = !pending.flipped;
+  renderBoard();
+}
+
 function cancelPending(){ pending=null; renderAll(); setMsg('Placement cancelled.'); }
 
 function confirmPending(){
@@ -428,7 +436,7 @@ function confirmPending(){
   const [aq,ar]=pending.anchor.split(',').map(Number);
   const d = DIRS[pending.validDirs[pending.dirIdx]];
   const kB = key(aq+d[0], ar+d[1]);
-  const res = corePlace(current, pending.ti, pending.anchor, kB);
+  const res = corePlace(current, pending.ti, pending.anchor, kB, pending.flipped);
   pending = null;
   if(!res.ok){ setMsg(res.msg); renderAll(); return; }
 
@@ -454,22 +462,23 @@ function touchesFreshPrinted(aq,ar,bq,br){
 
 // Places rack[tileIdx] on cells kA/kB (tile[0]->kA, tile[1]->kB) for the given player index.
 // Returns {ok, msg, gained, gained2, tile} — mutates board/scores/rack when ok.
-function corePlace(playerIdx, tileIdx, kA, kB){
+function corePlace(playerIdx, tileIdx, kA, kB, flipped=false){
   const player = players[playerIdx];
   const tile = player.rack[tileIdx];
+  const placedTile = flipped ? [tile[1],tile[0]] : tile;
   const [aq,ar]=kA.split(',').map(Number), [bq,br]=kB.split(',').map(Number);
 
   if(!player.hasMovedFirst && !touchesFreshPrinted(aq,ar,bq,br)){
     return {ok:false, msg:'Your first tile must touch one of the six printed symbols (a different one than other players used).'};
   }
 
-  board[kA].sym = tile[0];
-  board[kB].sym = tile[1];
+  board[kA].sym = placedTile[0];
+  board[kB].sym = placedTile[1];
 
-  const gained = scoreSide(aq,ar,tile[0], bq,br);
-  const gained2 = scoreSide(bq,br,tile[1], aq,ar);
-  applyScore(player, tile[0], gained);
-  applyScore(player, tile[1], gained2);
+  const gained = scoreSide(aq,ar,placedTile[0], bq,br);
+  const gained2 = scoreSide(bq,br,placedTile[1], aq,ar);
+  applyScore(player, placedTile[0], gained);
+  applyScore(player, placedTile[1], gained2);
 
   if(!player.hasMovedFirst){
     neighbors(aq,ar).concat(neighbors(bq,br)).forEach(k=>{
@@ -479,7 +488,12 @@ function corePlace(playerIdx, tileIdx, kA, kB){
   }
 
   player.rack.splice(tileIdx,1);
-  return {ok:true, tile, gained, gained2};
+  refillRack(player);
+  return {ok:true, tile:placedTile, gained, gained2};
+}
+
+function refillRack(player){
+  while(player.rack.length<6 && bag.length) player.rack.push(bag.pop());
 }
 
 
@@ -619,8 +633,6 @@ function doSwap(){
 }
 
 function refillAndEndTurn(msg){
-  const p = players[current];
-  while(p.rack.length<6 && bag.length) p.rack.push(bag.pop());
   swappedThisTurn=false;
 
   if(!hasAnyMove()){
