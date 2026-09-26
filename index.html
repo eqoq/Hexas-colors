@@ -437,12 +437,11 @@ function confirmPending(){
 
   if(player.pendingBonus>0){
     player.pendingBonus--;
-    msg += ' Hexas-colors! Bonus placement used.';
-    if(player.pendingBonus>0){
-      setMsg(msg+' You have another bonus placement — drag another tile.');
-      renderAll();
-      return;
-    }
+    msg += ' Hexas-colors! You earned a bonus placement. Place another tile before the bot.';
+    if(player.pendingBonus>0) msg += ' You have another bonus placement waiting.';
+    setMsg(msg);
+    renderAll();
+    return;
   }
   refillAndEndTurn(msg);
 }
