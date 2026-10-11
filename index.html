@@ -443,6 +443,11 @@ function confirmPending(){
   const player = players[current];
   let msg = `${pname(current)} scored ${CNAME[res.tile[0]]} +${res.gained}, ${CNAME[res.tile[1]]} +${res.gained2}.`;
 
+  if(hasWon(player)){
+    endGame();
+    return;
+  }
+
   if(player.pendingBonus>0){
     player.pendingBonus--;
     msg += ' Hexas-colors! You earned a bonus placement. Place another tile before the bot.';
@@ -575,6 +580,7 @@ function botStep(msgSoFar){
   if(!move){ refillAndEndTurn(msgSoFar); return; }
   const res = corePlace(current, move.ti, move.kA, move.kB);
   if(!res.ok){ refillAndEndTurn(msgSoFar); return; }
+  if(hasWon(player)){ endGame(); return; }
   recentBotCells.add(move.kA);
   recentBotCells.add(move.kB);
   renderBoard();
@@ -610,6 +616,10 @@ function applyScore(player, color, amount){
   let after = before+amount;
   if(after>=18){ after=18; if(!player.bonusGiven[color]){ player.bonusGiven[color]=true; player.pendingBonus++; } }
   player.scores[color]=after;
+}
+
+function hasWon(player){
+  return COLORS.every(color=>player.scores[color]===18);
 }
 
 function swapAllowed(){
