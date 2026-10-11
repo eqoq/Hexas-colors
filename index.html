@@ -360,13 +360,13 @@ function renderScores(){
 
 function renderRack(){
   const el = document.getElementById('rack'); el.innerHTML='';
-  const rack = players[current].rack;
-  const bot = players[current].isBot;
+  const rack = players[0].rack;
+  const humanTurn = !players[current].isBot;
   rack.forEach((t,i)=>{
     const d=document.createElement('div');
     d.className='tile'+(pending && pending.ti===i ? ' pendingTile':'');
     d.innerHTML = tileMarkup(t,15).svg;
-    if(!bot && !pending) d.addEventListener('pointerdown', (e)=>startDrag(e,i,t));
+    if(humanTurn && !pending) d.addEventListener('pointerdown', (e)=>startDrag(e,i,t));
     el.appendChild(d);
   });
 }
